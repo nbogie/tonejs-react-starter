@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import * as Tone from 'tone';
 import { ToneAudioNode } from 'tone';
-import { SynthDict, allSynthTypes, SynthName, AnySynth } from './synths';
+import { Synth, PluckSynth, AMSynth, DuoSynth, FMSynth, MonoSynth } from "tone";
+
 
 /**
  * Prepares some tone.js synths for use, and returns a function to access them.
@@ -26,7 +27,7 @@ export function useSynths(outputNode: ToneAudioNode): (synthName: SynthName) => 
 
 function createAllSynths(outputNode: Tone.OutputNode): SynthDict {
     const newSynths: SynthDict = {};
-    for (const st of allSynthTypes()) {
+    for (const st of allSynthNames()) {
         const synth = createSynthOfType(st)
         synth.connect(outputNode)
         newSynths[st] = synth;
@@ -55,3 +56,18 @@ function createSynthOfType(synthType: SynthName): AnySynth {
             throw new Error("unknown synth type: " + synthType)
     }
 }
+
+
+//I expect there's a suitable type exported by tone.js which serves as an interface to all synths
+export type AnySynth = Synth | PluckSynth | AMSynth | DuoSynth | FMSynth | MonoSynth //there are others
+
+export type SynthName = "Pluck" | "Main" | "AM" | "Duo" | "FM" | "Membrane" | "Mono";
+/** @returns list of all synth names supported by this simplified useSynths system. */
+
+export type SynthDict = { [key: string]: AnySynth };
+
+export function allSynthNames(): SynthName[] {
+    return ["Pluck", "Main", "AM", "FM", "Membrane", "Mono"]
+}
+
+

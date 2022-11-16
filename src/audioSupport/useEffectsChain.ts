@@ -10,23 +10,33 @@ import * as Tone from "tone";
  * @returns a ToneAudioNode representing the entry point into the fx chain
  */
 export function useEffectsChain() {
-    return useMemo(createEffectsChain, []);
+    return useMemo(() => createEffectsChain(true), []);
+}
+
+export function useEffectsChainNoDelay() {
+    return useMemo(() => createEffectsChain(false), []);
 }
 
 
-function createEffectsChain(): Tone.ToneAudioNode {
+function createEffectsChain(includeDelay: boolean): Tone.ToneAudioNode {
     Tone.Transport.bpm.value = 120;//relevant to feedback delay speed
 
-    // synths -> gain -> delay effect -> final output
     const preEffectGainNode = new Tone.Gain(0)
     preEffectGainNode.gain.rampTo(0.5, 0.1)
 
-    const delay = new Tone.FeedbackDelay("4n", 0.6);
+    if (includeDelay) {
+        // synths -> gain -> delay effect -> final output
 
-    preEffectGainNode.connect(delay)
+        const delay = new Tone.FeedbackDelay("4n", 0.6);
+        preEffectGainNode.connect(delay)
 
-    //hook the final node into the main output
-    delay.toDestination()
+        //hook the final node into the main output
+        delay.toDestination()
+    } else {
+
+        // synths -> gain -> final output
+        preEffectGainNode.toDestination()
+    }
 
     //return the first node of the effects chain
     return preEffectGainNode
