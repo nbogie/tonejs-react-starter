@@ -1,72 +1,41 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import './App.css'
 import * as Tone from 'tone'
 import { AMSynth, Analyser, DuoSynth, FMSynth, MetalSynth, MonoSynth, NoiseSynth, PluckSynth, Synth } from 'tone';
 
 function App() {
-  type SynthType = "Pluck" | "Main" | "AM" | "Duo" | "FM" | "Membrane" | "MetalSynth" | "Mono" | "Noise" | "NoiseOHH";
-  function allSynthTypes(): SynthType[] {
-    return ["Pluck", "Main", "AM", "FM", "Membrane", "Mono", "Noise", "NoiseOHH"] //"MetalSynth", "Duo",
+
+  type SynthDict = { [key: string]: AnySynth };
+  type SynthName = "Pluck" | "Main" | "AM" | "Duo" | "FM" | "Membrane" | "Mono";
+  type AnySynth = Synth | PluckSynth | AMSynth | DuoSynth | FMSynth | MonoSynth //there are others
+
+  function allSynthTypes(): SynthName[] {
+    return ["Pluck", "Main", "AM", "FM", "Membrane", "Mono"]
   }
 
-  const [synthType, setSynthType] = useState<SynthType>("Main");
+  //you can ignore this. it will make cachedSynths available.
+  const cachedSynths = useMemo<SynthDict>(() => createAllSynths(), []);
+
+  const [synthType, setSynthType] = useState<SynthName>("Main");
   const [octave, setOctave] = useState(3);
-  const [gainNode, dontUse] = useState(() => createEffectsChain());
-  const [analyser, dontuse2] = useState(() => createAnalyser());
-  const [cachedSynths, setSynths] = useState<SynthDict>(() => createAllSynths());
-
-  async function handleStart() {
-    await Tone.start();
-  }
-  function stopAllSequences() {
-    Tone.Transport.stop();
-    //TODO: sequence needs stopped not just the transport, or else when transport starts, so will seq.
-  }
-
-  type PitchesArray = (string | string[])[]
-  function playSequence1() {
-    // subdivisions are given as subarrays
-    const pitches: PitchesArray = [
-      "C3", ["Eb3", "G3"], "Eb3", ["Bb3", "D4"],
-      "C3", ["Eb3", "G3"], "Eb3", ["Bb3", "C4"],
-      "C3", ["Eb3", "G3"], "Eb3", ["Bb3", "Bb3"],
-      "C3", ["Eb3", "G3"], "Eb3", ["Bb3", "A3"]
-    ]
-    playSequence(pitches)
-  }
-
-
-  function playSequence(pitches: PitchesArray) {
-    const synth = getSynthOfType(synthType);
-    const seq = new Tone.Sequence((time, note) => {
-      synth.triggerAttackRelease(note, 0.1, time);
-    }, pitches);
-    seq.start(0)
-    Tone.Transport.start();
-  }
-
+  const gainNode = useMemo(createEffectsChain, [])
 
   function createEffectsChain() {
-    Tone.Transport.bpm.value = 86;
+    Tone.Transport.bpm.value = 120;
 
+    // synths -> gain -> delay effect -> final output
     const preEffectGainNode = new Tone.Gain(0)
     preEffectGainNode.gain.rampTo(0.5, 0.1)
     const delay = new Tone.FeedbackDelay("4n", 0.6);
+
+    preEffectGainNode.connect(delay)
+
     //hook the final node into the main output
     delay.toDestination()
-    preEffectGainNode.connect(delay)
-    // const autoWah = new Tone.AutoWah(30, 6, -30);
-    // autoWah.Q.value = 2;
-    // autoWah.connect(delay)
+
     //return the first node of the effects chain
     return preEffectGainNode
   }
-  function createAnalyser() {
-    const an = new Analyser("fft", 256)
-
-  }
-
-  type SynthDict = { [key: string]: AnySynth };
 
   function createAllSynths(): SynthDict {
     const newSynths: SynthDict = {};
@@ -76,8 +45,7 @@ function App() {
     return newSynths
   }
 
-  type AnySynth = Synth | PluckSynth | AMSynth | MetalSynth | DuoSynth | FMSynth | MonoSynth | NoiseSynth
-  function createSynthOfType(synthType: SynthType): AnySynth {
+  function createSynthOfType(synthType: SynthName): AnySynth {
     switch (synthType) {
       case "Main":
         return new Tone.Synth()
@@ -91,32 +59,14 @@ function App() {
         return new Tone.FMSynth()
       case "Membrane":
         return new Tone.MembraneSynth()
-      case "MetalSynth":
-        return new Tone.MetalSynth()
       case "Mono":
         return new Tone.MonoSynth()
-      case "Noise":
-        return new Tone.NoiseSynth({
-          volume: -10,
-          envelope: {
-            attack: 0.01,
-            decay: 0.15
-          }
-        });
-      case "NoiseOHH":
-        return new Tone.NoiseSynth({
-          volume: -10,
-          envelope: {
-            attack: 0.01,
-            decay: 0.3
-          },
-        });
       default:
         throw new Error("unknown synth type: " + synthType)
     }
   }
   /** get pre-created synth of given type */
-  function getSynthOfType(st: SynthType): AnySynth {
+  function getSynthOfType(st: SynthName): AnySynth {
     return cachedSynths[st]
   }
   function startNote(midiNote: number) {
@@ -129,31 +79,28 @@ function App() {
 
     const freqInHz = Tone.Frequency(octave * 12 + midiNote, "midi").toFrequency();
 
-    if (synthType === "Noise" || synthType === "NoiseOHH") {
-      // synth.triggerAttackRelease("8n", 0.05)
-      synth.triggerAttack("8n", 0)
 
-    } else {
-      synth.triggerAttackRelease(freqInHz * random(0.99, 1.01), "16n")
-    }
+    synth.triggerAttackRelease(freqInHz, "16n")
+
   }
-  function handleGainSliderChanged(val: number) {
-    gainNode.gain.rampTo(val, 0.1)
-  }
-  function random(mn: number, mx: number): number {
-    const delta = mx - mn;
-    return Math.random() * delta + mn;
-  }
+
+
   return (
     <div className="App">
-      <h3>🙉 Danger - may be loud noise ⚠️</h3>
-      Experimental audio can be loud and harsh.
+      <h3>🙉 Danger - may be loud ⚠️</h3>
       <br />
-      <button onClick={handleStart}>start</button>
 
-      {[0, 2, 4, 7, 9, 12, 14, 16, 19, 21].map(note =>
-        <button onClick={() => startNote(note)} key={note}>{note}</button>
-      )}
+      <button onClick={() => startNote(0)}>0</button>
+      <button onClick={() => startNote(2)}>2</button>
+      <button onClick={() => startNote(4)}>4</button>
+      <button onClick={() => startNote(7)}>7</button>
+      <button onClick={() => startNote(9)}>9</button>
+      <button onClick={() => startNote(12)}>12</button>
+      <button onClick={() => startNote(14)}>14</button>
+      <button onClick={() => startNote(16)}>16</button>
+      <button onClick={() => startNote(19)}>19</button>
+      <button onClick={() => startNote(21)}>21</button>
+      <button onClick={() => startNote(24)}>24</button>
 
       <br />
       Synth Type:
@@ -167,25 +114,10 @@ function App() {
       {octave}
       <button onClick={() => setOctave(prev => prev + 1)}>+</button>
       <br />
-      Sequences:
-      <button onClick={() => playSequence1()}>seq1</button>
-      <button onClick={() => stopAllSequences()}>stop</button>
-      <br />
 
-      Gain:
-      <input type="range" step={0.01} onChange={e => handleGainSliderChanged(parseFloat(e.target.value))} min={0} max={1} />
 
-      <Visualiser num={gainNode.gain.value} />
     </div>
   )
 }
 
 export default App
-
-
-interface VisualiserProps {
-  num: number;
-}
-function Visualiser(props: VisualiserProps) {
-  return <div>{props.num}</div>
-}
